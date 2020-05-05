@@ -16,9 +16,11 @@ API Subscription and API Key Generation(App registration) work flows, in the fol
 
 ```
 CREATE TABLE IF NOT EXISTS AM_ONE_TIME_APPROVALS (
+            WF_EXTERNAL_REFERENCE VARCHAR(255),
             USER_NAME VARCHAR(45),
             WF_TYPE VARCHAR(45),
-            PRIMARY KEY (USER_NAME, WF_TYPE)
+            WF_STATUS VARCHAR(255),
+            PRIMARY KEY (WF_EXTERNAL_REFERENCE)
 )ENGINE INNODB;
 ```
 
