@@ -36,6 +36,7 @@ import org.wso2.carbon.apimgt.impl.workflow.WorkflowConstants;
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowException;
 
 import java.sql.SQLException;
+import java.util.SortedMap;
 
 
 public class OneTimeSubscriptionApproval extends SubscriptionCreationWSWorkflowExecutor {
@@ -46,16 +47,18 @@ public class OneTimeSubscriptionApproval extends SubscriptionCreationWSWorkflowE
 
     @Override
     public WorkflowResponse execute(WorkflowDTO workflowDTO) throws WorkflowException {
-        SubscriptionWorkflowDTO subsWorkflowDTO = (SubscriptionWorkflowDTO) workflowDTO;
-        String subscriber = subsWorkflowDTO.getSubscriber();
+        String subscriber = ((SubscriptionWorkflowDTO) workflowDTO).getSubscriber();
 
         try {
             if (ApprovalManager.isPriorApproved(subscriber, WorkflowConstants.WF_TYPE_AM_SUBSCRIPTION_CREATION)) {
                 SubscriptionCreationSimpleWorkflowExecutor simpleExecutor = new SubscriptionCreationSimpleWorkflowExecutor();
                 return simpleExecutor.execute(workflowDTO);
             }
+
+            ApprovalManager.recordApprovalRequest(subscriber, WorkflowConstants.WF_TYPE_AM_SUBSCRIPTION_CREATION,
+                    workflowDTO.getExternalWorkflowReference(), workflowDTO.getStatus());
         } catch (SQLException e) {
-            throw new WorkflowException("Error while checking if user is prior approved for subscription in DB", e);
+            throw new WorkflowException("Error during OneTimeSubscriptionApproval workflow execution flow", e);
         }
 
         return super.execute(workflowDTO);
@@ -64,28 +67,30 @@ public class OneTimeSubscriptionApproval extends SubscriptionCreationWSWorkflowE
     @Override
     public WorkflowResponse complete(WorkflowDTO workflowDTO) throws WorkflowException {
         WorkflowResponse response = super.complete(workflowDTO);
-
-        SubscriptionWorkflowDTO subsWorkflowDTO = (SubscriptionWorkflowDTO) workflowDTO;
-        String subscriber = subsWorkflowDTO.getSubscriber();
+        String subscriber;
 
         try {
-            ApprovalManager.recordApproval(subscriber, WorkflowConstants.WF_TYPE_AM_SUBSCRIPTION_CREATION);
+            subscriber = ApprovalManager.getApproveRequestUser(workflowDTO.getExternalWorkflowReference());
+            ApprovalManager.updateApprovalStatus(workflowDTO.getExternalWorkflowReference(), workflowDTO.getStatus());
         } catch (SQLException e) {
-            throw new WorkflowException("Error while recording that user is approved for subscription in DB", e);
+            throw new WorkflowException("Error during OneTimeSubscriptionApproval workflow completion flow", e);
         }
 
-        String toEmail = getSubscriberEmail(subscriber);
+        if (!subscriber.isEmpty()) {
+            String toEmail = getSubscriberEmail(subscriber);
 
-        if (toEmail != null && !toEmail.isEmpty()) {
-            String api = subsWorkflowDTO.getApiName() + "-" + subsWorkflowDTO.getApiVersion();
-            String subject = "You have successfully subscribed to " + api;
-            StringBuilder content = new StringBuilder();
-            content.append(subject)
-                    .append("\n\n")
-                    .append("Please access the developer portal to generate keys in order to start consuming the API")
-                    .append("\n\n")
-                    .append("To report issues or engage with the community please https://github.com/" + api);
-            EmailSender.sendEmail(toEmail, getfromEmailAddress(), getFromEmailPassword(), subject, content.toString());
+            if (toEmail != null && !toEmail.isEmpty()) {
+                SubscriptionWorkflowDTO subsWorkflowDTO = (SubscriptionWorkflowDTO) workflowDTO;
+                String api = subsWorkflowDTO.getApiName() + "-" + subsWorkflowDTO.getApiVersion();
+                String subject = "You have successfully subscribed to " + api;
+                StringBuilder content = new StringBuilder();
+                content.append(subject)
+                        .append("\n\n")
+                        .append("Please access the developer portal to generate keys in order to start consuming the API")
+                        .append("\n\n")
+                        .append("To report issues or engage with the community please https://github.com/" + api);
+                EmailSender.sendEmail(toEmail, getfromEmailAddress(), getFromEmailPassword(), subject, content.toString());
+            }
         }
 
         return response;
@@ -98,12 +103,23 @@ public class OneTimeSubscriptionApproval extends SubscriptionCreationWSWorkflowE
                 .getAPIManagerConfiguration();
 
         JWTConfigurationDto jwtConfigurationDto = configuration.getJwtConfigurationDto();
+        String claimRetrieverImplClass = jwtConfigurationDto.getClaimRetrieverImplClass();
+
+        if (claimRetrieverImplClass == null) {
+            claimRetrieverImplClass = "org.wso2.carbon.apimgt.impl.token.DefaultClaimsRetriever";
+        }
 
         try {
             ClaimsRetriever claimsRetriever = (ClaimsRetriever) APIUtil.getClassForName(
-                    jwtConfigurationDto.getClaimRetrieverImplClass()).newInstance();
+                    claimRetrieverImplClass).newInstance();
             claimsRetriever.init();
-            return claimsRetriever.getClaims(username).get(NotifierConstants.EMAIL_CLAIM);
+            SortedMap<String, String> claims = claimsRetriever.getClaims(username);
+
+            if (claims != null) {
+                if (claims.containsKey(NotifierConstants.EMAIL_CLAIM)) {
+                    return claims.get(NotifierConstants.EMAIL_CLAIM);
+                }
+            }
         } catch (InstantiationException | IllegalAccessException | ClassNotFoundException | APIManagementException e) {
             log.error("Error while getting subscriber email", e);
         }

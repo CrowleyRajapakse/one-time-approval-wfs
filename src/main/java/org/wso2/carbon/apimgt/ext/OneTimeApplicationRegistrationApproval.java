@@ -17,14 +17,16 @@ public class OneTimeApplicationRegistrationApproval extends ApplicationRegistrat
 
     @Override
     public WorkflowResponse execute(WorkflowDTO workflowDTO) throws WorkflowException {
-        ApplicationRegistrationWorkflowDTO appRegWorkflowDTO = (ApplicationRegistrationWorkflowDTO) workflowDTO;
-        String subscriber = appRegWorkflowDTO.getUserName();
+        String subscriber = ((ApplicationRegistrationWorkflowDTO) workflowDTO).getUserName();
 
         try {
             if (ApprovalManager.isPriorApproved(subscriber, WorkflowConstants.WF_TYPE_AM_APPLICATION_REGISTRATION_PRODUCTION)) {
                 ApplicationRegistrationSimpleWorkflowExecutor simpleExecutor = new ApplicationRegistrationSimpleWorkflowExecutor();
                 return simpleExecutor.execute(workflowDTO);
             }
+
+            ApprovalManager.recordApprovalRequest(subscriber, WorkflowConstants.WF_TYPE_AM_APPLICATION_REGISTRATION_PRODUCTION,
+                    workflowDTO.getExternalWorkflowReference(), workflowDTO.getStatus());
         } catch (SQLException e) {
             throw new WorkflowException("Error while checking if user is prior approved for subscription in DB", e);
         }
@@ -36,11 +38,8 @@ public class OneTimeApplicationRegistrationApproval extends ApplicationRegistrat
     public WorkflowResponse complete(WorkflowDTO workflowDTO) throws WorkflowException {
         WorkflowResponse response = super.complete(workflowDTO);
 
-        ApplicationRegistrationWorkflowDTO appRegWorkflowDTO = (ApplicationRegistrationWorkflowDTO) workflowDTO;
-        String subscriber = appRegWorkflowDTO.getUserName();
-
         try {
-            ApprovalManager.recordApproval(subscriber, WorkflowConstants.WF_TYPE_AM_APPLICATION_REGISTRATION_PRODUCTION);
+            ApprovalManager.updateApprovalStatus(workflowDTO.getExternalWorkflowReference(), workflowDTO.getStatus());
         } catch (SQLException e) {
             throw new WorkflowException("Error while recording that user is approved for subscription in DB", e);
         }
