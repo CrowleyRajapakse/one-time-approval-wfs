@@ -10,6 +10,8 @@ import org.wso2.carbon.apimgt.impl.workflow.ApplicationRegistrationWSWorkflowExe
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowConstants;
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowException;
 
+import java.sql.SQLException;
+
 public class OneTimeApplicationRegistrationApproval extends ApplicationRegistrationWSWorkflowExecutor {
     private static final Log log = LogFactory.getLog(OneTimeApplicationRegistrationApproval.class);
 
@@ -18,9 +20,13 @@ public class OneTimeApplicationRegistrationApproval extends ApplicationRegistrat
         ApplicationRegistrationWorkflowDTO appRegWorkflowDTO = (ApplicationRegistrationWorkflowDTO) workflowDTO;
         String subscriber = appRegWorkflowDTO.getUserName();
 
-        if (ApprovalManager.isPriorApproved(subscriber, WorkflowConstants.WF_TYPE_AM_APPLICATION_REGISTRATION_PRODUCTION)) {
-            ApplicationRegistrationSimpleWorkflowExecutor simpleExecutor = new ApplicationRegistrationSimpleWorkflowExecutor();
-            return simpleExecutor.execute(workflowDTO);
+        try {
+            if (ApprovalManager.isPriorApproved(subscriber, WorkflowConstants.WF_TYPE_AM_APPLICATION_REGISTRATION_PRODUCTION)) {
+                ApplicationRegistrationSimpleWorkflowExecutor simpleExecutor = new ApplicationRegistrationSimpleWorkflowExecutor();
+                return simpleExecutor.execute(workflowDTO);
+            }
+        } catch (SQLException e) {
+            throw new WorkflowException("Error while checking if user is prior approved for subscription in DB", e);
         }
 
         return super.execute(workflowDTO);
@@ -33,7 +39,11 @@ public class OneTimeApplicationRegistrationApproval extends ApplicationRegistrat
         ApplicationRegistrationWorkflowDTO appRegWorkflowDTO = (ApplicationRegistrationWorkflowDTO) workflowDTO;
         String subscriber = appRegWorkflowDTO.getUserName();
 
-        ApprovalManager.recordApproval(subscriber, WorkflowConstants.WF_TYPE_AM_APPLICATION_REGISTRATION_PRODUCTION);
+        try {
+            ApprovalManager.recordApproval(subscriber, WorkflowConstants.WF_TYPE_AM_APPLICATION_REGISTRATION_PRODUCTION);
+        } catch (SQLException e) {
+            throw new WorkflowException("Error while recording that user is approved for subscription in DB", e);
+        }
 
         return response;
     }

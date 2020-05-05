@@ -35,6 +35,8 @@ import org.wso2.carbon.apimgt.impl.workflow.SubscriptionCreationWSWorkflowExecut
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowConstants;
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowException;
 
+import java.sql.SQLException;
+
 
 public class OneTimeSubscriptionApproval extends SubscriptionCreationWSWorkflowExecutor {
     private static final Log log = LogFactory.getLog(OneTimeSubscriptionApproval.class);
@@ -47,9 +49,13 @@ public class OneTimeSubscriptionApproval extends SubscriptionCreationWSWorkflowE
         SubscriptionWorkflowDTO subsWorkflowDTO = (SubscriptionWorkflowDTO) workflowDTO;
         String subscriber = subsWorkflowDTO.getSubscriber();
 
-        if (ApprovalManager.isPriorApproved(subscriber, WorkflowConstants.WF_TYPE_AM_SUBSCRIPTION_CREATION)) {
-            SubscriptionCreationSimpleWorkflowExecutor simpleExecutor = new SubscriptionCreationSimpleWorkflowExecutor();
-            return simpleExecutor.execute(workflowDTO);
+        try {
+            if (ApprovalManager.isPriorApproved(subscriber, WorkflowConstants.WF_TYPE_AM_SUBSCRIPTION_CREATION)) {
+                SubscriptionCreationSimpleWorkflowExecutor simpleExecutor = new SubscriptionCreationSimpleWorkflowExecutor();
+                return simpleExecutor.execute(workflowDTO);
+            }
+        } catch (SQLException e) {
+            throw new WorkflowException("Error while checking if user is prior approved for subscription in DB", e);
         }
 
         return super.execute(workflowDTO);
@@ -62,7 +68,11 @@ public class OneTimeSubscriptionApproval extends SubscriptionCreationWSWorkflowE
         SubscriptionWorkflowDTO subsWorkflowDTO = (SubscriptionWorkflowDTO) workflowDTO;
         String subscriber = subsWorkflowDTO.getSubscriber();
 
-        ApprovalManager.recordApproval(subscriber, WorkflowConstants.WF_TYPE_AM_SUBSCRIPTION_CREATION);
+        try {
+            ApprovalManager.recordApproval(subscriber, WorkflowConstants.WF_TYPE_AM_SUBSCRIPTION_CREATION);
+        } catch (SQLException e) {
+            throw new WorkflowException("Error while recording that user is approved for subscription in DB", e);
+        }
 
         String toEmail = getSubscriberEmail(subscriber);
 
