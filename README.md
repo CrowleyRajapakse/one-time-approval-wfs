@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS AM_ONE_TIME_APPROVALS (
 ```
 <WorkFlowExtensions>
     ...
-        <SubscriptionCreation executor="org.wso2.carbon.apimgt.impl.workflow.SubscriptionCreationWSWorkflowExecutor">
+        <SubscriptionCreation executor="org.wso2.carbon.apimgt.ext.OneTimeSubscriptionApproval">
              <Property name="serviceEndpoint">http://localhost:9765/services/SubscriptionApprovalWorkFlowProcess/</Property>
              <Property name="username">admin</Property>
              <Property name="password">admin</Property>
